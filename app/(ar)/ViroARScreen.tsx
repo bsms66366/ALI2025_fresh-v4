@@ -296,7 +296,8 @@ const ViroARScreen = () => {
     // Clean up and navigate back
     setLocalModelUri(null);
     setError(null);
-    router.back();
+    //router.back();
+    router.push("/(resources)/ModelFetchScreen");
   };
 
   if (!localModelUri && !isDownloading && !error) {
