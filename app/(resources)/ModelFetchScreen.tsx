@@ -35,15 +35,130 @@ const ModelFetchScreen = () => {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
   
-  // Code scanner setup
+  // Code scanner setup with debounce
   const codeScanner = useCodeScanner({
     codeTypes: ['qr'],
     onCodeScanned: (codes) => {
-      if (codes.length > 0 && !scanned && codes[0].value) {
+      if (codes.length > 0 && !scanned && !scanLoading && codes[0].value) {
         handleBarCodeScanned(codes[0].value);
       }
     }
   });
+
+  // Handle QR code scanning with debounce
+  const handleBarCodeScanned = async (data: string) => {
+    if (scanned || scanLoading) {
+      console.log('Scan blocked - already processing');
+      return;
+    }
+    
+    try {
+      setScanned(true);
+      setScanLoading(true);
+      setScanError(null);
+      
+      console.log('QR code scanned:', data);
+      
+      // Simple validation - ensure it's a URL
+      if (!data.startsWith('https')) {
+        throw new Error('Invalid QR code. Please scan a QR code with a valid model URL.');
+      }
+      
+      // Extract model URL from QR code
+      const modelUrl = data.trim();
+      console.log('Model URL from QR code:', modelUrl);
+      
+      // Check if the URL ends with a valid 3D model extension
+      const validExtensions = ['.glb', '.gltf', '.obj', '.fbx'];
+      const hasValidExtension = validExtensions.some(ext => modelUrl.toLowerCase().endsWith(ext));
+      
+      if (!hasValidExtension) {
+        throw new Error('Invalid model format. Please scan a QR code with a valid 3D model URL.');
+      }
+      
+      // Prepare to download the model
+      const filename = modelUrl.split('/').pop() || 'model.glb';
+      const localUri = `${FileSystem.documentDirectory}models/${filename}`;
+      
+      // Create the models directory if it doesn't exist
+      const modelDir = `${FileSystem.documentDirectory}models/`;
+      const dirInfo = await FileSystem.getInfoAsync(modelDir);
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(modelDir, { intermediates: true });
+      }
+      
+      // Check if model already exists
+      const fileInfo = await FileSystem.getInfoAsync(localUri);
+      
+      if (fileInfo.exists) {
+        // Model already downloaded
+        setShowScanner(false);
+        await navigateToARScreen(localUri, 'qr_scan');
+      } else {
+        // Download the model with progress tracking
+        console.log('Downloading model from URL:', modelUrl);
+        
+        const downloadResumable = FileSystem.createDownloadResumable(
+          modelUrl,
+          localUri,
+          {},
+          (downloadProgress) => {
+            const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
+            setDownloadProgress(progress);
+          }
+        );
+        
+        const result = await downloadResumable.downloadAsync();
+        if (result) {
+          setShowScanner(false);
+          await navigateToARScreen(result.uri, 'qr_scan');
+        } else {
+          throw new Error('Failed to download model');
+        }
+      }
+    } catch (error) {
+      console.error('Error processing QR code:', error);
+      setScanError(error instanceof Error ? error.message : 'Failed to process QR code');
+      // Don't reset scanned here to prevent rapid re-scanning
+      setTimeout(() => {
+        setScanned(false);
+      }, 2000); // Add 2-second delay before allowing next scan
+    } finally {
+      setScanLoading(false);
+    }
+  };
+
+  // Navigate to AR screen with the downloaded model with error handling
+  const navigateToARScreen = async (modelUri: string, source: string) => {
+    try {
+      // Store the model URI in AsyncStorage
+      await AsyncStorage.setItem('currentModelUri', modelUri);
+      
+      // Get the stored models and add this one if not present
+      const storedModels = await AsyncStorage.getItem('downloadedModels');
+      const models = storedModels ? JSON.parse(storedModels) : [];
+      if (!models.includes(modelUri)) {
+        models.push(modelUri);
+        await AsyncStorage.setItem('downloadedModels', JSON.stringify(models));
+      }
+
+      // Navigate to AR screen with replace to prevent going back to scanner
+      router.replace({
+        pathname: "/(ar)/ViroARScreen",
+        params: { 
+          modelUri,
+          source,
+          timestamp: Date.now() // Add timestamp to force new instance
+        }
+      });
+    } catch (error) {
+      console.error('Error storing model URI:', error);
+      Alert.alert('Error', 'Failed to prepare model for AR view');
+      // Reset scanning state on error
+      setScanned(false);
+      setScanLoading(false);
+    }
+  };
 
   // API URLs
   const API_URL = 'https://placements.bsms.ac.uk/api/physquiz';
@@ -229,112 +344,6 @@ const ModelFetchScreen = () => {
     } catch (error) {
       console.error('Error requesting camera permission:', error);
       Alert.alert('Error', 'Failed to access camera');
-    }
-  };
-
-  // Handle QR code scanning
-  const handleBarCodeScanned = async (data: string) => {
-    if (scanned || scanLoading) return;
-    
-    try {
-      setScanned(true);
-      setScanLoading(true);
-      setScanError(null);
-      
-      console.log('QR code scanned:', data);
-      
-      // Simple validation - ensure it's a URL
-      if (!data.startsWith('https')) {
-        throw new Error('Invalid QR code. Please scan a QR code with a valid model URL.');
-      }
-      
-      // Extract model URL from QR code
-      const modelUrl = data.trim();
-      console.log('Model URL from QR code:', modelUrl);
-      
-      // Check if the URL ends with a valid 3D model extension
-      const validExtensions = ['.glb', '.gltf', '.obj', '.fbx'];
-      const hasValidExtension = validExtensions.some(ext => modelUrl.toLowerCase().endsWith(ext));
-      
-      if (!hasValidExtension) {
-        throw new Error('Invalid model format. Please scan a QR code with a valid 3D model URL.');
-      }
-      
-      // Prepare to download the model
-      const filename = modelUrl.split('/').pop() || 'model.glb';
-      const localUri = `${FileSystem.documentDirectory}models/${filename}`;
-      
-      // Create the models directory if it doesn't exist
-      const modelDir = `${FileSystem.documentDirectory}models/`;
-      const dirInfo = await FileSystem.getInfoAsync(modelDir);
-      if (!dirInfo.exists) {
-        await FileSystem.makeDirectoryAsync(modelDir, { intermediates: true });
-      }
-      
-      // Check if model already exists
-      const fileInfo = await FileSystem.getInfoAsync(localUri);
-      
-      if (fileInfo.exists) {
-        // Model already downloaded
-        setShowScanner(false);
-        navigateToARScreen(localUri, 'qr_scan');
-      } else {
-        // Download the model with progress tracking
-        console.log('Downloading model from URL:', modelUrl);
-        
-        const downloadResumable = FileSystem.createDownloadResumable(
-          modelUrl,
-          localUri,
-          {},
-          (downloadProgress) => {
-            const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
-            setDownloadProgress(progress);
-          }
-        );
-        
-        const result = await downloadResumable.downloadAsync();
-        if (result) {
-          setShowScanner(false);
-          navigateToARScreen(result.uri, 'qr_scan');
-        } else {
-          throw new Error('Failed to download model');
-        }
-      }
-    } catch (error) {
-      console.error('Error processing QR code:', error);
-      setScanError(error instanceof Error ? error.message : 'Failed to process QR code');
-      setScanned(false);
-    } finally {
-      setScanLoading(false);
-    }
-  };
-
-  // Navigate to AR screen with the downloaded model
-  const navigateToARScreen = async (modelUri: string, source: string) => {
-    try {
-      // Store the model URI in AsyncStorage
-      await AsyncStorage.setItem('currentModelUri', modelUri);
-      
-      // Get the stored models and add this one if not present
-      const storedModels = await AsyncStorage.getItem('downloadedModels');
-      const models = storedModels ? JSON.parse(storedModels) : [];
-      if (!models.includes(modelUri)) {
-        models.push(modelUri);
-        await AsyncStorage.setItem('downloadedModels', JSON.stringify(models));
-      }
-
-      // Navigate to AR screen with replace to prevent going back to scanner
-      router.replace({
-        pathname: "/(ar)/ViroARScreen",
-        params: { 
-          modelUri,
-          source,
-          timestamp: Date.now() // Add timestamp to force new instance
-        }
-      });
-    } catch (error) {
-      console.error('Error storing model URI:', error);
-      Alert.alert('Error', 'Failed to prepare model for AR view');
     }
   };
 

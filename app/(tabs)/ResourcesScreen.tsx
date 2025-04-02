@@ -27,12 +27,12 @@ export default function ResourcesScreen() {
     try {
       // Clear any previous model URI
       await AsyncStorage.removeItem('currentModelUri');
-      // Navigate directly to the model fetch screen
-      router.push('/model-fetch');
+      // Navigate to ModelFetchScreen which has the QR scanner
+      router.push("/(resources)/ModelFetchScreen");
     } catch (error) {
       console.error('Error clearing AsyncStorage:', error);
       // Navigate anyway
-      router.push('/model-fetch');
+      router.push("/(resources)/ModelFetchScreen");
     }
   };
 

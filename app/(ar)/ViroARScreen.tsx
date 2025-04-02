@@ -97,6 +97,18 @@ const downloadModel = async (
   }
 };
 
+// Type for ViroARSceneNavigator props
+type ViroARSceneNavigatorProps = {
+  initialScene: {
+    scene: React.ComponentType<SceneProps>;
+  };
+  viroAppProps: {
+    modelUri: string;
+  };
+  autofocus?: boolean;
+  style?: any;
+};
+
 // Type for scene props from ViroARSceneNavigator
 type SceneProps = {
   sceneNavigator: {
@@ -197,99 +209,149 @@ const ViroARScreen = () => {
   const [localModelUri, setLocalModelUri] = useState<string | null>(null);
   const params = useLocalSearchParams();
   const modelUri = params.modelUri as string;
+  const mounted = useRef(true);
 
   useEffect(() => {
-    const loadModel = async () => {
-      if (!modelUri) return;
-      
-      setIsDownloading(true);
-      setError(null);
-      
+    // Cleanup function
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const initializeModel = async () => {
+      if (!modelUri) {
+        setError('No model URI provided');
+        return;
+      }
+
       try {
-        const localUri = await downloadModel(modelUri, setDownloadProgress);
-        if (localUri.startsWith('file://')) {
-          setLocalModelUri(localUri);
-        } else {
-          setLocalModelUri(`file://${localUri}`);
+        setIsDownloading(true);
+        setError(null);
+
+        // Validate the model URI
+        if (!modelUri.startsWith('file://') && !modelUri.startsWith('https://')) {
+          throw new Error('Invalid model URI format');
         }
-      } catch (err) {
-        setError(getErrorMessage(err));
+
+        // If the URI is already a local file, use it directly
+        if (modelUri.startsWith('file://')) {
+          const fileInfo = await FileSystem.getInfoAsync(modelUri);
+          if (!fileInfo.exists) {
+            throw new Error('Local model file not found');
+          }
+          if (mounted.current) {
+            setLocalModelUri(modelUri);
+          }
+          return;
+        }
+
+        // Download the model if it's a remote URL
+        const localUri = await downloadModel(modelUri, (progress) => {
+          if (mounted.current) {
+            setDownloadProgress(progress);
+          }
+        });
+
+        if (mounted.current) {
+          setLocalModelUri(localUri);
+        }
+      } catch (error) {
+        console.error('Error initializing model:', error);
+        if (mounted.current) {
+          setError(getErrorMessage(error));
+        }
       } finally {
-        setIsDownloading(false);
+        if (mounted.current) {
+          setIsDownloading(false);
+        }
       }
     };
 
-    loadModel();
+    initializeModel();
   }, [modelUri]);
 
-  const handleBackPress = () => {
-    router.back();
-  };
-
-  const handleError = (error: unknown) => {
-    setError(getErrorMessage(error));
-    setIsLoading(false);
-  };
-
   const handleLoadStart = () => {
-    setIsLoading(true);
-    setError(null);
+    if (mounted.current) {
+      setIsLoading(true);
+      setError(null);
+    }
   };
 
   const handleLoadEnd = () => {
-    setIsLoading(false);
+    if (mounted.current) {
+      setIsLoading(false);
+    }
   };
 
-  if (!modelUri) {
+  const handleError = (error: unknown) => {
+    console.error('AR Scene error:', error);
+    if (mounted.current) {
+      setError(getErrorMessage(error));
+      setIsLoading(false);
+    }
+  };
+
+  const handleBack = () => {
+    // Clean up and navigate back
+    setLocalModelUri(null);
+    setError(null);
+    router.back();
+  };
+
+  if (!localModelUri && !isDownloading && !error) {
     return (
       <View style={styles.container}>
-        <Text style={styles.errorText}>No model URI provided</Text>
+        <LoadingIndicator message="Initializing AR..." />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+          <Ionicons name="arrow-back" size={24} color="white" />
+          <Text style={styles.backButtonText}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <ViroARSceneNavigator
-        autofocus={true}
-        initialScene={{
-          scene: () => (
-            <ARScene
-              sceneNavigator={{ viroAppProps: { modelUri: localModelUri || modelUri } }}
-              onError={handleError}
-              onLoadStart={handleLoadStart}
-              onLoadEnd={handleLoadEnd}
-            />
-          ),
-        }}
-        style={styles.arView}
-      />
-      
-      <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
-        <Ionicons name="arrow-back" size={24} color="white" />
-      </TouchableOpacity>
-
-      {(isDownloading || isLoading || error) && (
-        <View style={styles.overlay}>
-          {isDownloading && !error && (
-            <LoadingIndicator 
-              progress={downloadProgress} 
-              message="Downloading 3D Model" 
-            />
-          )}
-          {isLoading && !isDownloading && !error && (
-            <LoadingIndicator message="Loading 3D Model" />
-          )}
-          {error && (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{error}</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={() => router.replace('/qr-scanner')}>
-                <Text style={styles.buttonText}>Try Again</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+      {localModelUri && (
+        <ViroARSceneNavigator
+          autofocus={true}
+          initialScene={{
+            scene: () => (
+              <ARScene
+                sceneNavigator={{ viroAppProps: { modelUri: localModelUri || '' } }}
+                onError={handleError}
+                onLoadStart={handleLoadStart}
+                onLoadEnd={handleLoadEnd}
+              />
+            ),
+          }}
+          viroAppProps={{
+            modelUri: localModelUri,
+          }}
+          style={styles.arView}
+        />
       )}
+
+      {(isLoading || isDownloading) && (
+        <LoadingIndicator
+          progress={isDownloading ? downloadProgress : undefined}
+          message={isDownloading ? "Downloading model..." : "Loading model..."}
+        />
+      )}
+
+      <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+        <Ionicons name="arrow-back" size={24} color="white" />
+        <Text style={styles.backButtonText}>Go Back</Text>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -357,9 +419,9 @@ const styles = StyleSheet.create({
     left: 20,
     zIndex: 1,
   },
-  buttonText: {
+  backButtonText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
+    marginLeft: 10,
   },
 });
