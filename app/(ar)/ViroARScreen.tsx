@@ -25,21 +25,27 @@ const getErrorMessage = (error: unknown): string => {
   return 'Unknown error occurred';
 };
 
-// Safe material creation
-const safeCreateMaterials = () => {
+// Material configuration for GLB models
+const configureMeshMaterials = () => {
   try {
-    if (ViroMaterials && typeof ViroMaterials.createMaterials === 'function') {
-      ViroMaterials.createMaterials({
-        defaultMaterial: {
-          lightingModel: "Blinn",
-          diffuseColor: "#FFFFFF"
-        }
-      });
-      return true;
+    if (!ViroMaterials) {
+      console.error('ViroMaterials is not defined');
+      return false;
     }
-    return false;
+
+    // Create material with PBR properties suitable for GLB
+    ViroMaterials.createMaterials({
+      modelMaterial: {
+        diffuseColor: '#808080',  // Medium gray base color
+        lightingModel: 'Blinn',  // Use Blinn lighting model
+        blendMode: 'Add'         // Additive blending for better detail
+      }
+    });
+
+    console.log('GLB material created');
+    return true;
   } catch (error) {
-    console.error('Error creating materials:', error);
+    console.error('Error in configureMeshMaterials:', error);
     return false;
   }
 };
@@ -163,7 +169,7 @@ const ARScene: React.FC<ARSceneProps> = (props) => {
 
   useEffect(() => {
     if (modelLoaded) {
-      safeCreateMaterials();
+      // Materials are loaded from the GLB file
     }
   }, [modelLoaded]);
 
@@ -181,11 +187,26 @@ const ARScene: React.FC<ARSceneProps> = (props) => {
 
   const handleLoadEnd = () => {
     if (mounted.current) {
-      // Reset scale to initial scale when loading a new model
+      console.log('Model load end triggered');
+      
+      // Configure materials first
+      const materialsConfigured = configureMeshMaterials();
+      console.log('Materials configured:', materialsConfigured);
+      
+      // Reset transformations
       setScale(INITIAL_SCALE);
       setPosition([0, 0, 0]);
       setRotation([0, 0, 0]);
+      
+      // Set model as loaded
       setModelLoaded(true);
+      
+      console.log({
+        modelUri: props.sceneNavigator.viroAppProps.modelUri,
+        materialName: 'modelMaterial',
+        scale: INITIAL_SCALE
+      });
+      
       props.onLoadEnd();
     }
   };
@@ -241,15 +262,43 @@ const ARScene: React.FC<ARSceneProps> = (props) => {
         dragType="FixedToWorld"
         onDrag={onDrag}
       >
+        <ViroAmbientLight color="#ffffff" intensity={200}/>
+        <ViroSpotLight
+          innerAngle={5}
+          outerAngle={25}
+          direction={[0, -1, 0]}
+          position={[0, 3, 0]}
+          color="#ffffff"
+          intensity={500}
+        />
+        <ViroSpotLight
+          innerAngle={5}
+          outerAngle={25}
+          direction={[0, 0, -1]}
+          position={[0, 0, 3]}
+          color="#ffffff"
+          intensity={500}
+        />
         <Viro3DObject
           source={{ uri: props.sceneNavigator.viroAppProps.modelUri }}
           type="GLB"
           scale={scale}
           position={position}
           rotation={rotation}
-          onError={handleError}
-          onLoadStart={handleLoadStart}
-          onLoadEnd={handleLoadEnd}
+          materials={['modelMaterial']}
+          highAccuracyEvents={true}
+          onError={(event) => {
+            console.log('Model error:', event.nativeEvent);
+            handleError(event);
+          }}
+          onLoadStart={() => {
+            console.log('Model load starting');
+            handleLoadStart();
+          }}
+          onLoadEnd={() => {
+            console.log('Model load complete');
+            handleLoadEnd();
+          }}
         />
       </ViroNode>
     </ViroARScene>
