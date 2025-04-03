@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Dimensions, Platform, NativeSyntheticEvent } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Dimensions, Platform, NativeSyntheticEvent, ImageSourcePropType, Pressable } from 'react-native';
+import { FontAwesome } from '@expo/vector-icons';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
@@ -12,6 +13,8 @@ import {
   ViroNode,
   ViroMaterials,
   ViroErrorEvent,
+  ViroPinchStateTypes,
+  ViroRotateStateTypes,
 } from '@reactvision/react-viro';
 import { useLocalSearchParams, router } from 'expo-router';
 
@@ -139,6 +142,18 @@ const LoadingIndicator: React.FC<{ progress?: number; message: string }> = ({ pr
 const ARScene: React.FC<ARSceneProps> = (props) => {
   const [modelLoaded, setModelLoaded] = useState(false);
   const mounted = useRef(true);
+  
+  // Initial scale that matches the larynx model
+  const INITIAL_SCALE: [number, number, number] = [0.05, 0.05, 0.05];
+
+
+
+
+
+  // State for model transformations
+  const [scale, setScale] = useState<[number, number, number]>(INITIAL_SCALE);
+  const [position, setPosition] = useState<[number, number, number]>([0, 0, 0]);
+  const [rotation, setRotation] = useState<[number, number, number]>([0, 0, 0]);
 
   useEffect(() => {
     return () => {
@@ -166,8 +181,43 @@ const ARScene: React.FC<ARSceneProps> = (props) => {
 
   const handleLoadEnd = () => {
     if (mounted.current) {
+      // Reset scale to initial scale when loading a new model
+      setScale(INITIAL_SCALE);
+      setPosition([0, 0, 0]);
+      setRotation([0, 0, 0]);
       setModelLoaded(true);
       props.onLoadEnd();
+    }
+  };
+
+  // Handle pinch to zoom
+  const onPinch = (pinchState: ViroPinchStateTypes, scaleFactor: number, source: ImageSourcePropType) => {
+    if (pinchState === ViroPinchStateTypes.PINCH_START || pinchState === ViroPinchStateTypes.PINCH_MOVE) {
+      // Calculate new scale but maintain aspect ratio
+      const newScale: [number, number, number] = [scale[0] * scaleFactor, scale[1] * scaleFactor, scale[2] * scaleFactor];
+      
+      // Optional: Add min/max scale limits to prevent the model from getting too small or too large
+      const MIN_SCALE = 0.01;
+      const MAX_SCALE = 0.5;
+      
+      if (newScale[0] >= MIN_SCALE && newScale[0] <= MAX_SCALE) {
+        setScale(newScale);
+      }
+    }
+  };
+
+  // Handle drag to move
+  const onDrag = (draggedToPosition: [number, number, number], source: ImageSourcePropType) => {
+    if (draggedToPosition) {
+      setPosition(draggedToPosition);
+    }
+  };
+
+  // Handle rotation
+  const onRotate = (rotateState: ViroRotateStateTypes, rotationFactor: number, source: ImageSourcePropType) => {
+    if (rotateState === ViroRotateStateTypes.ROTATE_START || rotateState === ViroRotateStateTypes.ROTATE_MOVE) {
+      const newRotation: [number, number, number] = [rotation[0], rotation[1] + rotationFactor, rotation[2]];
+      setRotation(newRotation);
     }
   };
 
@@ -184,13 +234,19 @@ const ARScene: React.FC<ARSceneProps> = (props) => {
         outerAngle={20}
         castsShadow={true}
       />
-      <ViroNode position={[0, -1, -3]}>
+      <ViroNode 
+        position={[0, -1, -3]}
+        onPinch={onPinch}
+        onRotate={onRotate}
+        dragType="FixedToWorld"
+        onDrag={onDrag}
+      >
         <Viro3DObject
           source={{ uri: props.sceneNavigator.viroAppProps.modelUri }}
           type="GLB"
-          scale={[0.05, 0.05, 0.05]}
-          position={[0, 0, 0]}
-          rotation={[0, 0, 0]}
+          scale={scale}
+          position={position}
+          rotation={rotation}
           onError={handleError}
           onLoadStart={handleLoadStart}
           onLoadEnd={handleLoadEnd}
@@ -292,11 +348,10 @@ const ViroARScreen = () => {
     }
   };
 
-  const handleBack = () => {
-    // Clean up and navigate back
+  const handleResourcesNav = () => {
+    // Clean up and navigate to resources screen
     setLocalModelUri(null);
     setError(null);
-    //router.back();
     router.push("/(resources)/ModelFetchScreen");
   };
 
@@ -312,10 +367,12 @@ const ViroARScreen = () => {
     return (
       <View style={styles.container}>
         <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-          <Ionicons name="arrow-back" size={24} color="white" />
-          <Text style={styles.backButtonText}>Go Back</Text>
-        </TouchableOpacity>
+        <View style={[styles.buttonContainer, { borderWidth: 4, borderColor: '#ffd33d', borderRadius: 18 }]}>
+          <Pressable style={[styles.button, { backgroundColor: '#fff' }]} onPress={handleResourcesNav}>
+            <FontAwesome name="book" size={18} color="#25292e" style={styles.buttonIcon} />
+            <Text style={[styles.buttonLabel, { color: '#25292e' }]}>Resources</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
@@ -349,10 +406,15 @@ const ViroARScreen = () => {
         />
       )}
 
-      <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-        <Ionicons name="arrow-back" size={24} color="white" />
-        <Text style={styles.backButtonText}>Go Back</Text>
-      </TouchableOpacity>
+      <View style={[styles.buttonContainer, { borderWidth: 4, borderColor: '#ffd33d', borderRadius: 18 }]}>
+        <Pressable 
+          style={[styles.button, { backgroundColor: '#fff' }]} 
+          onPress={() => router.replace('/(resources)/ModelFetchScreen')}
+        >
+          <FontAwesome name="book" size={18} color="#25292e" style={styles.buttonIcon} />
+          <Text style={[styles.buttonLabel, { color: '#25292e' }]}>Resources</Text>
+        </Pressable>
+      </View>
     </View>
   );
 };
@@ -414,15 +476,30 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 10,
   },
-  backButton: {
+  buttonContainer: {
     position: 'absolute',
     top: 40,
     left: 20,
     zIndex: 1,
+    width: 120,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 3,
   },
-  backButtonText: {
-    color: 'white',
+  button: {
+    borderRadius: 10,
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  buttonIcon: {
+    paddingRight: 8,
+  },
+  buttonLabel: {
+    color: '#fff',
     fontSize: 16,
-    marginLeft: 10,
   },
 });
