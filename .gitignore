@@ -34,3 +34,10 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+
+# 3D Models
+assets/models/*.glb
+assets/models/*.gltf
+assets/models/*.obj
+assets/models/*.fbx
+assets/models/*.dae
