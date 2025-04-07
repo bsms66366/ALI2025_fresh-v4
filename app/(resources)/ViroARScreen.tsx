@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'expo-router';
 import { StyleSheet, View, Text, TouchableOpacity, Dimensions, Platform, NativeSyntheticEvent, ImageSourcePropType, Pressable, ActivityIndicator } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,7 +17,7 @@ import {
   ViroPinchStateTypes,
   ViroRotateStateTypes,
 } from '@reactvision/react-viro';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, router} from 'expo-router';
 
 // Helper function to extract error message
 const getErrorMessage = (error: unknown): string => {
@@ -317,6 +318,7 @@ const ARScene: React.FC<ARSceneProps> = (props) => {
 
 // Main ViroARScreen component
 const ViroARScreen = () => {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
@@ -411,7 +413,7 @@ const ViroARScreen = () => {
     // Clean up and navigate to resources screen
     setLocalModelUri(null);
     setError(null);
-    router.push("/(resources)/ModelFetchScreen" as any);
+    router.replace('/');
   };
 
   if (!localModelUri && !isDownloading && !error) {
@@ -444,8 +446,8 @@ const ViroARScreen = () => {
             setIsDownloading(false);
             setDownloadProgress(0);
             
-            // Then go back to previous screen
-            router.back();
+            // Navigate to ModelFetchScreen
+            router.replace('/');
           }}
         >
           <Ionicons name="chevron-back" size={24} color="#fff" />
