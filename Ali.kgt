@@ -1,0 +1,20 @@
+
+graph "My First Diagram" {
+  node "Start" {
+    shape: rectangle
+    color: #2ecc71
+  }
+  
+  node "Process" {
+    shape: circle
+    color: #3498db
+  }
+  
+  node "End" {
+    shape: rectangle
+    color: #e74c3c
+  }
+  
+  edge "Start" -> "Process"
+  edge "Process" -> "End"
+}

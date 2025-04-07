@@ -1,0 +1,20 @@
+{
+    "klighd.server": {
+      "host": "localhost",
+      "port": 5007
+    },
+    "klighd.diagram": {
+      "syntaxHighlighting": true,
+      "animateLayout": true,
+      "zoomToFit": true
+    },
+    "klighd.language": {
+      "client": {
+        "name": "KLighD Language Client",
+        "id": "klighd-language-client"
+      },
+      "server": {
+        "module": "klighd-language-server"
+      }
+    }
+  }

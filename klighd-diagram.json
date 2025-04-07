@@ -1,0 +1,92 @@
+{
+  "id": "ali2025-project-structure",
+  "type": "diagram",
+  "properties": {
+    "title": "ALI2025 Project Structure",
+    "description": "Visualization of the ALI2025 React Native/Expo application structure"
+  },
+  "nodes": [
+    {
+      "id": "root",
+      "type": "container",
+      "label": "ALI2025",
+      "children": [
+        {
+          "id": "app",
+          "type": "container",
+          "label": "app/",
+          "children": [
+            {
+              "id": "ar",
+              "type": "container",
+              "label": "(ar)/",
+              "children": [
+                {"id": "viro-ar", "label": "ViroARScreen.tsx"},
+                {"id": "ar-layout", "label": "_layout.tsx"}
+              ]
+            },
+            {
+              "id": "courses",
+              "type": "container",
+              "label": "(courses)/",
+              "children": [
+                {"id": "biomed", "label": "BioMedScreen.tsx"},
+                {"id": "health", "label": "HealthProfScreen.tsx"},
+                {"id": "medneuro", "label": "MedNeuroScreen.tsx"},
+                {"id": "pa", "label": "PAScreen.tsx"}
+              ]
+            }
+          ]
+        },
+        {
+          "id": "components",
+          "type": "container",
+          "label": "components/",
+          "description": "Reusable UI components"
+        },
+        {
+          "id": "assets",
+          "type": "container",
+          "label": "assets/",
+          "children": [
+            {"id": "models", "label": "3D Models", "description": "GLB/GLTF files"}
+          ]
+        },
+        {
+          "id": "data",
+          "type": "container",
+          "label": "data/",
+          "description": "Application data and content"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "app",
+      "to": "components",
+      "type": "uses",
+      "label": "imports"
+    },
+    {
+      "from": "ar",
+      "to": "assets",
+      "type": "uses",
+      "label": "loads"
+    }
+  ],
+  "styles": {
+    "container": {
+      "shape": "rectangle",
+      "padding": 10,
+      "borderRadius": 5,
+      "backgroundColor": "#f5f5f5",
+      "borderColor": "#333333"
+    },
+    "edge": {
+      "stroke": "#666666",
+      "strokeWidth": 1,
+      "arrow": true
+    }
+  }
+}

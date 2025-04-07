@@ -1,0 +1,5 @@
+{
+    "klighd.server.start": true,
+    "klighd.language.server.enabled": true,
+    "klighd.diagram.syntaxHighlighting": true
+  }

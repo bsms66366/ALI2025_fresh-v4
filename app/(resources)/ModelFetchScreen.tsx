@@ -143,8 +143,8 @@ const ModelFetchScreen = () => {
       }
 
       // Navigate to AR screen with replace to prevent going back to scanner
-      router.replace({
-        pathname: "/(ar)/ViroARScreen",
+      router.push({
+        pathname: "./ViroARScreen",
         params: { 
           modelUri,
           source,

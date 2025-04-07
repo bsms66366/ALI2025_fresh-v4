@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Dimensions, Platform, NativeSyntheticEvent, ImageSourcePropType, Pressable } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Dimensions, Platform, NativeSyntheticEvent, ImageSourcePropType, Pressable, ActivityIndicator } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -130,11 +130,14 @@ type ARSceneProps = SceneProps & {
 
 // LoadingIndicator component
 const LoadingIndicator: React.FC<{ progress?: number; message: string }> = ({ progress, message }) => (
-  <View style={styles.loadingBox}>
-    <Text style={styles.loadingText}>{message}</Text>
-    {progress !== undefined && (
-      <Text style={styles.progressText}>{Math.round(progress * 100)}%</Text>
-    )}
+  <View style={styles.overlay}>
+    <View style={styles.loadingBox}>
+      <ActivityIndicator size="large" color="#ffd33d" />
+      <Text style={styles.loadingText}>{message}</Text>
+      {progress !== undefined && (
+        <Text style={styles.progressText}>{Math.round(progress * 100)}%</Text>
+      )}
+    </View>
   </View>
 );
 
@@ -158,6 +161,13 @@ const ARScene: React.FC<ARSceneProps> = (props) => {
   useEffect(() => {
     return () => {
       mounted.current = false;
+      // Clean up 3D object resources
+      if (props.sceneNavigator.viroAppProps.modelUri) {
+        setModelLoaded(false);
+        setScale(INITIAL_SCALE);
+        setPosition([0, 0, 0]);
+        setRotation([0, 0, 0]);
+      }
     };
   }, []);
 
@@ -352,7 +362,7 @@ const ViroARScreen = () => {
     // Clean up and navigate to resources screen
     setLocalModelUri(null);
     setError(null);
-    router.push("/(resources)/ModelFetchScreen");
+    router.push("/(resources)/ModelFetchScreen" as any);
   };
 
   if (!localModelUri && !isDownloading && !error) {
@@ -367,18 +377,32 @@ const ViroARScreen = () => {
     return (
       <View style={styles.container}>
         <Text style={styles.errorText}>{error}</Text>
-        <View style={[styles.buttonContainer, { borderWidth: 4, borderColor: '#ffd33d', borderRadius: 18 }]}>
-          <Pressable style={[styles.button, { backgroundColor: '#fff' }]} onPress={handleResourcesNav}>
-            <FontAwesome name="book" size={18} color="#25292e" style={styles.buttonIcon} />
-            <Text style={[styles.buttonLabel, { color: '#25292e' }]}>Resources</Text>
-          </Pressable>
-        </View>
+
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      <View style={styles.header}>
+        <Pressable 
+          style={styles.backButton}
+          onPress={() => {
+            // First reset all state
+            setLocalModelUri(null);
+            setError(null);
+            setIsLoading(false);
+            setIsDownloading(false);
+            setDownloadProgress(0);
+            
+            // Then go back to previous screen
+            router.back();
+          }}
+        >
+          <Ionicons name="chevron-back" size={24} color="#fff" />
+          <Text style={styles.backButtonText}>Back</Text>
+        </Pressable>
+      </View>
       {localModelUri && (
         <ViroARSceneNavigator
           autofocus={true}
@@ -406,15 +430,7 @@ const ViroARScreen = () => {
         />
       )}
 
-      <View style={[styles.buttonContainer, { borderWidth: 4, borderColor: '#ffd33d', borderRadius: 18 }]}>
-        <Pressable 
-          style={[styles.button, { backgroundColor: '#fff' }]} 
-          onPress={() => router.replace('/(resources)/ModelFetchScreen')}
-        >
-          <FontAwesome name="book" size={18} color="#25292e" style={styles.buttonIcon} />
-          <Text style={[styles.buttonLabel, { color: '#25292e' }]}>Resources</Text>
-        </Pressable>
-      </View>
+
     </View>
   );
 };
@@ -422,6 +438,28 @@ const ViroARScreen = () => {
 export default ViroARScreen;
 
 const styles = StyleSheet.create({
+  header: {
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
+    zIndex: 1,
+    paddingHorizontal: 20,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 8,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
+  backButtonText: {
+    color: '#fff',
+    marginLeft: 8,
+    fontSize: 16,
+  },
+
   container: {
     flex: 1,
     backgroundColor: '#000',
