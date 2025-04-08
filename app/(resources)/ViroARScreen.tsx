@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
-import { StyleSheet, View, Text, TouchableOpacity, Dimensions, Platform, NativeSyntheticEvent, ImageSourcePropType, Pressable, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Dimensions, Platform, NativeSyntheticEvent, ImageSourcePropType, Pressable, ActivityIndicator, Button, ViewProps } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,6 +17,26 @@ import {
   ViroPinchStateTypes,
   ViroRotateStateTypes,
 } from '@reactvision/react-viro';
+
+// Type for mesh loading event
+type ViroMeshLoadedEvent = {
+  meshNames: string[];
+};
+
+// Type for Viro3DObject props
+type CustomViro3DObjectProps = ViewProps & {
+  source: { uri: string };
+  type: 'GLB';
+  scale: [number, number, number];
+  position: [number, number, number];
+  rotation: [number, number, number];
+  materials?: string[];
+  highAccuracyEvents?: boolean;
+  onError?: (event: NativeSyntheticEvent<any>) => void;
+  onLoadStart?: () => void;
+  onLoadEnd?: () => void;
+  onMeshesLoaded?: (event: NativeSyntheticEvent<ViroMeshLoadedEvent>) => void;
+};
 import { useLocalSearchParams, router} from 'expo-router';
 
 // Helper function to extract error message
@@ -26,29 +46,33 @@ const getErrorMessage = (error: unknown): string => {
   return 'Unknown error occurred';
 };
 
-// Material configuration for GLB models
-const configureMeshMaterials = () => {
-  try {
-    if (!ViroMaterials) {
-      console.error('ViroMaterials is not defined');
-      return false;
-    }
+import { AnatomyMaterials, getModelScale, type MaterialConfig, type LightingModel } from '../../components/modelConfig';
 
-    // Create material with PBR properties suitable for GLB
-    ViroMaterials.createMaterials({
-      modelMaterial: {
-        diffuseColor: '#808080',  // Medium gray base color
-        lightingModel: 'Blinn',  // Use Blinn lighting model
-        blendMode: 'Add'         // Additive blending for better detail
-      }
+import { MeshMaterialMap } from '../../components/modelConfig';
+
+// Configure materials for 3D models
+const configureMeshMaterials = (meshNames?: string[]) => {
+  // Create all materials
+  ViroMaterials.createMaterials({
+    defaultMaterial: AnatomyMaterials.default,
+    muscleMaterial: AnatomyMaterials.muscle,
+    cartilageMaterial: AnatomyMaterials.cartilage,
+    tissueMaterial: AnatomyMaterials.tissue,
+  });
+  
+  if (meshNames && meshNames.length > 0) {
+    // Map mesh names to materials
+    const materials = meshNames.map(meshName => {
+      // Try to find a specific material for this mesh
+      const materialName = MeshMaterialMap[meshName.toLowerCase()];
+      return materialName || 'defaultMaterial';
     });
-
-    console.log('GLB material created');
-    return true;
-  } catch (error) {
-    console.error('Error in configureMeshMaterials:', error);
-    return false;
+    console.log('Applying materials:', materials, 'to meshes:', meshNames);
+    return materials;
   }
+  
+  // Return default material if no mesh names provided
+  return ['defaultMaterial'];
 };
 
 // Download model to local file system
@@ -124,6 +148,7 @@ type SceneProps = {
   sceneNavigator: {
     viroAppProps: {
       modelUri: string;
+      materialMappings?: Record<string, string>; // Map mesh names to material names
     };
   };
 };
@@ -151,10 +176,21 @@ const LoadingIndicator: React.FC<{ progress?: number; message: string }> = ({ pr
 // ARScene component
 const ARScene: React.FC<ARSceneProps> = (props) => {
   const [modelLoaded, setModelLoaded] = useState(false);
+  const [meshMaterials, setMeshMaterials] = useState<string[]>([]);
   const mounted = useRef(true);
   
-  // Initial scale that matches the larynx model
-  const INITIAL_SCALE: [number, number, number] = [0.05, 0.05, 0.05];
+  // Get initial scale for the current model
+  const INITIAL_SCALE = getModelScale(props.sceneNavigator.viroAppProps.modelUri);
+
+  // Handle material assignment for different meshes
+  const handleLoadMeshMaterials = (meshNames: string[]) => {
+    const { materialMappings = {} } = props.sceneNavigator.viroAppProps;
+    const materials = meshNames.map(meshName => 
+      materialMappings[meshName] || 'default' // Use default material if no mapping exists
+    );
+    setMeshMaterials(materials);
+    console.log('Mesh materials assigned:', materials);
+  };
 
 
 
@@ -198,23 +234,26 @@ const ARScene: React.FC<ARSceneProps> = (props) => {
 
   const handleLoadEnd = () => {
     if (mounted.current) {
-      console.log('Model load end triggered');
-      
-      // Configure materials first
-      const materialsConfigured = configureMeshMaterials();
-      console.log('Materials configured:', materialsConfigured);
+      console.log('Model load complete');
       
       // Reset transformations
       setScale(INITIAL_SCALE);
       setPosition([0, 0, 0]);
       setRotation([0, 0, 0]);
       
-      // Set model as loaded
+      // Configure materials and apply them
+      const materials = [
+        'muscleMaterial',
+        'cartilageMaterial',
+        'tissueMaterial'
+      ];
+      configureMeshMaterials();
+      setMeshMaterials(materials);
       setModelLoaded(true);
       
       console.log({
         modelUri: props.sceneNavigator.viroAppProps.modelUri,
-        materialName: 'modelMaterial',
+        materials: materials,
         scale: INITIAL_SCALE
       });
       
@@ -296,9 +335,9 @@ const ARScene: React.FC<ARSceneProps> = (props) => {
           scale={scale}
           position={position}
           rotation={rotation}
-          materials={['modelMaterial']}
+          materials={meshMaterials}
           highAccuracyEvents={true}
-          onError={(event) => {
+          onError={(event: NativeSyntheticEvent<any>) => {
             console.log('Model error:', event.nativeEvent);
             handleError(event);
           }}
@@ -324,6 +363,7 @@ const ViroARScreen = () => {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [localModelUri, setLocalModelUri] = useState<string | null>(null);
+  const [isNavigating, setIsNavigating] = useState(false);
   const params = useLocalSearchParams();
   const modelUri = params.modelUri as string;
   const mounted = useRef(true);
@@ -409,11 +449,28 @@ const ViroARScreen = () => {
     }
   };
 
-  const handleResourcesNav = () => {
-    // Clean up and navigate to resources screen
-    setLocalModelUri(null);
-    setError(null);
-    router.replace('/');
+  const handleBack = async () => {
+    if (isNavigating) return;
+    try {
+      setIsNavigating(true);
+      
+      // First cleanup state
+      setLocalModelUri(null);
+      setError(null);
+      setIsLoading(false);
+      setIsDownloading(false);
+      setDownloadProgress(0);
+      
+      // Add debouncing timeout before navigation
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Use router.replace to match the navigation pattern from ModelFetchScreen
+      await router.replace('./ModelFetchScreen');
+    } catch (error) {
+      console.error('Navigation error:', error);
+    } finally {
+      setIsNavigating(false);
+    }
   };
 
   if (!localModelUri && !isDownloading && !error) {
@@ -435,31 +492,12 @@ const ViroARScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Pressable 
-          style={styles.backButton}
-          onPress={() => {
-            // First reset all state
-            setLocalModelUri(null);
-            setError(null);
-            setIsLoading(false);
-            setIsDownloading(false);
-            setDownloadProgress(0);
-            
-            // Navigate to ModelFetchScreen
-            router.replace('/');
-          }}
-        >
-          <Ionicons name="chevron-back" size={24} color="#fff" />
-          <Text style={styles.backButtonText}>Back</Text>
-        </Pressable>
-      </View>
       {localModelUri && (
         <ViroARSceneNavigator
           autofocus={true}
           initialScene={{
             scene: () => (
-              <ARScene
+              <ARScene 
                 sceneNavigator={{ viroAppProps: { modelUri: localModelUri || '' } }}
                 onError={handleError}
                 onLoadStart={handleLoadStart}
@@ -489,14 +527,14 @@ const ViroARScreen = () => {
 export default ViroARScreen;
 
 const styles = StyleSheet.create({
-  header: {
+ /*  header: {
     position: 'absolute',
     top: 50,
     left: 0,
     right: 0,
     zIndex: 1,
     paddingHorizontal: 20,
-  },
+  }, */
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',

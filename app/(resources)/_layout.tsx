@@ -1,8 +1,38 @@
-import { Slot } from 'expo-router';
+import { Stack } from 'expo-router';
 
-// This layout file prevents files in this directory from being treated as routes
-// The "children" prop is automatically passed by Expo Router
 export default function ResourcesLayout() {
-  // Using Slot instead of Stack to prevent files in this directory from being treated as routes
-  return <Slot />;
+  return (
+    <Stack>
+      <Stack.Screen 
+        name="ModelFetchScreen" 
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen 
+        name="ViroARScreen" 
+        options={{
+          headerShown: false
+        }}
+      />
+      <Stack.Screen 
+        name="SearchScreen" 
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen 
+        name="PathPotsScreen" 
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen 
+        name="SessionNotesScreen" 
+        options={{
+          headerShown: false,
+        }}
+      />
+    </Stack>
+  );
 }
